@@ -5,16 +5,20 @@ import itertools
 import re
 import os
 import configparser
+import shutil
 from urllib.parse import urlparse
 
 def is_url(path):
     return 'http' in urlparse(path).scheme
 
+def is_dir(path):
+    return os.path.isdir(path)
+
 def is_file(path):
     return os.path.isfile(path)
 
-bg_color='#505050'
-fg_color='#00f2b2'
+bg_color='#303030'
+fg_color='#3C889F'
 insert_color='#ffffff'
 list_font = ('Helvetica', 18)
 FILENAME = 'quick_access.cfg'
@@ -34,19 +38,27 @@ def generate_sections(config):
 def starter(path,args=[]):
     if   is_url(path):
         return lambda args=args: webbrowser.open_new_tab(path+' '.join(args))
-    elif is_file(path):
+    elif shutil.which(path):
         try:
             return lambda args=args: subprocess.Popen([path]+args)
         except IOError:
             executable = os.path.basename(path)
             return lambda args=args: subprocess.Popen([executable]+args,cwd=os.path.dirname(path))
-    return lambda args=args: None
+    elif is_file(path):
+        return lambda args=args: subprocess.Popen(['explorer',path])
+    elif is_dir(path):
+        return lambda args=args: webbrowser.open(path)
+    try:
+        return lambda args=args: subprocess.call([path]+args)
+    except IOError:
+        pass
+    return lambda args: None
 
 class AccessItem:
-    def __init__(self,section,keyword,value,function):
+    def __init__(self,section,keyword,values,function):
         self.section = section
         self.keyword = keyword
-        self.value = value
+        self.value = values
         self.function = function
 
 def setup():
@@ -58,7 +70,10 @@ def setup():
         for option,value in items:
             option = option.lower()
             if section == 'items':
-                keywordmap[option] = AccessItem(section,option,value,starter(value))
+                accessitems = []
+                for subvalue in [sv.strip() for sv in value.split(',')]:
+                    accessitems.append(AccessItem(section,option,value,starter(subvalue)))
+                keywordmap[option] = accessitems
 
 class AutocompleteEntry(Entry):
     def __init__(self, lista, *args, **kwargs):
@@ -75,17 +90,16 @@ class AutocompleteEntry(Entry):
         self.bind("<Down>", self.down)
         self.words = self.comparison()
         self.lb = None
-        self.after(150,lambda: self.changed(None,None,None))
 
     def create_listbox(self):
-        self.lb = Listbox(bg=bg_color,fg=fg_color,height=len(self.words),font=list_font)
+        self.lb = Listbox(bg=bg_color,fg=fg_color,height=len(self.words),font=list_font,relief=RIDGE)
         self.lb.bind("<Right>", self.selection)
         self.lb.bind("<FocusIn>", self.selection)
         self.lb.bind("<MouseWheel>", lambda event: self.move_selection(event.delta//120))
         self.lb.bind("<Motion>", lambda event: self.set_selection(self.lb.nearest(event.y)))
         self.lb.place(x=self.winfo_x(), y=self.winfo_y()+self.winfo_height())
         
-    def changed(self, name, index, mode):
+    def changed(self, name=None, index=None, mode=None):
         self.words = self.comparison()
         if self.words:
             if self.lb:
@@ -110,6 +124,7 @@ class AutocompleteEntry(Entry):
                 self.lb = None
             self.icursor(END)
             self.focus_set()
+            self.changed()
 
     def set_selection(self, index):
         if self.lb:
@@ -131,6 +146,7 @@ class AutocompleteEntry(Entry):
                 index = str(((int(index)-amount)%self.lb.size()))
                 self.lb.selection_set(first=index)
                 self.lb.activate(index)
+        self.focus_set()
             
     def up(self, event):
         self.move_selection(1)
@@ -141,8 +157,7 @@ class AutocompleteEntry(Entry):
     def comparison(self):
         last_part = self.var.get().split(',')[-1].strip()
         if last_part:
-            ret_list = [w for w in self.lista if re.search(last_part, w)]
-            return ret_list
+            return sorted(filter(lambda w: last_part in w,self.lista),key=lambda w: w.find(last_part))[:20]
         return self.lista
 
 class Application:
@@ -154,25 +169,37 @@ class Application:
             bg=bg_color,fg=fg_color,insertbackground=insert_color,
             insertwidth=6,
             width=ws,font=("Helvetica", -60),
-            borderwidth=1, relief=SUNKEN
+            borderwidth=2, relief=RIDGE
             )
         self.entry.pack(padx=80,pady=80)
         self.entry.focus_set()
-        
+
+        # self.root.title('QuickAccess')
+        self.root.wait_visibility(self.root)
         self.root.geometry('%dx%d+%d+%d' % (ws, hs, 0, 0))
-        
+
         self.root.configure(background='pink')
-        self.root.wm_attributes("-topmost", True)
-        self.root.wm_attributes("-transparent", "pink")
+        self.root.wm_attributes('-topmost', True)
+        self.root.wm_attributes('-transparent', 'pink')
+        
+
+        self.root.update()
+        self.entry.changed()
+        
         
         self.root.bind('<Escape>',self.quit)
         # self.root.bind('<Motion>',self.quit)
-        # self.root.bind('<Button-1>',self.quit)
+        self.root.bind('<Button-1>',self.quit)
         # self.root.bind('<Button-2>',self.quit)
         # self.root.bind('<Button-3>',self.quit)
         self.root.bind('<Return>',self.text_entry)
         self.root.bind('<Control-Key-s>',self.save_entry)
+        self.root.bind('<Control-Key-o>',self.open_config)
     
+    def open_config(self,event=None):
+        webbrowser.open(FILENAME)
+        self.quit()
+
     def get_parts(self):
         text = self.entry.get().lower()
         parts = text.strip().split(',')
@@ -186,7 +213,8 @@ class Application:
             kw = subparts[0:1][0]
             args = subparts[1:]
             if kw in keywordmap:
-                keywordmap[kw].function(args)
+                for ai in keywordmap[kw]:
+                    ai.function(args)
         self.quit()
 
     def save_entry(self,event):
@@ -211,8 +239,12 @@ class Application:
                 value = keywordmap[kw].value
                 if value is not None:
                     config.set('unnamed',RENAMEME+str(counter),value+' '.join(args))
-                    with open(FILENAME, 'w') as configfile:
-                        config.write(configfile)
+                    counter+=1
+            else:
+                config.set('unnamed',kw,' '.join(args))
+        with open(FILENAME, 'w') as configfile:
+            config.write(configfile)
+        self.open_config()
     
     def quit(self,event=None):
         self.root.destroy()
