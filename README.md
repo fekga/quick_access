@@ -4,7 +4,7 @@ A simple Python tool for accessing favourite pages and programs from anywhere on
 
 # Setup:
 
-Requires [Python3](https://www.python.org/downloads/) installed.
+Requires [Python 3](https://www.python.org/downloads/) installed.
 
 * Copy the files to a folder of your choice.
 * Run `python quick_access.py`.
@@ -27,9 +27,10 @@ Requires [Python3](https://www.python.org/downloads/) installed.
 | Right Arrow  | Paste selected autocomplete option |
 | Tab          | Paste selected autocomplete option |
 | Enter        | Run tool                           | _Each item will run/open_
-| Comma        |                                    | _Used for separating items_
-| Space        |                                    | _Used for separating arguments from item_
-| Ctrl + s     | Save items in config file          | _Saved items will show under 'unnamed' section_
+| Comma        | Command separator                  | _Used for separating items_
+| Space        | Argument separator                 | _Used for separating arguments_
+| Ctrl + s     | Save items in config file          | _Saved items will show under `unnamed` section_
+| Ctrl + o     | Open config file                   | _Don't forget to save changes_
 | Escape       | Exit tool
 
 # Config file:
