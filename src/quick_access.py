@@ -17,13 +17,13 @@ def is_dir(path):
 def is_file(path):
     return os.path.isfile(path)
 
-bg_color='#303030'
-fg_color='#3C889F'
+bg_color='#262626'
+fg_color='#1984FF'
 insert_color='#ffffff'
 list_font = ('Helvetica', 18)
-FILENAME = 'quick_access.cfg'
+FILENAME = os.path.join('config','quick_access.cfg')
 
-config = configparser.RawConfigParser()
+config = configparser.ConfigParser()
 keywordmap = dict()
 
 
@@ -41,7 +41,7 @@ def starter(path,args=[]):
     elif shutil.which(path):
         try:
             return lambda args=args: subprocess.Popen([path]+args)
-        except IOError:
+        except:
             executable = os.path.basename(path)
             return lambda args=args: subprocess.Popen([executable]+args,cwd=os.path.dirname(path))
     elif is_file(path):
@@ -50,9 +50,9 @@ def starter(path,args=[]):
         return lambda args=args: webbrowser.open(path)
     try:
         return lambda args=args: subprocess.call([path]+args)
-    except IOError:
+    except:
         pass
-    return lambda args: None
+    return None
 
 class AccessItem:
     def __init__(self,section,keyword,values,function):
@@ -71,9 +71,16 @@ def setup():
             option = option.lower()
             if section == 'items':
                 accessitems = []
-                for subvalue in [sv.strip() for sv in value.split(',')]:
-                    accessitems.append(AccessItem(section,option,value,starter(subvalue)))
-                keywordmap[option] = accessitems
+
+                subvalues = [sv.strip() for sv in value.split(',') if sv]
+                if subvalues:
+                    for subvalue in subvalues:
+                        if subvalue:
+                            function = starter(subvalue)
+                            if function:
+                                accessitem = AccessItem(section,option,value,function)
+                                accessitems.append(accessitem)
+                    keywordmap[option] = accessitems
 
 class AutocompleteEntry(Entry):
     def __init__(self, lista, *args, **kwargs):
@@ -214,7 +221,10 @@ class Application:
             args = subparts[1:]
             if kw in keywordmap:
                 for ai in keywordmap[kw]:
-                    ai.function(args)
+                    try:
+                        ai.function(args)
+                    except:
+                        pass
         self.quit()
 
     def save_entry(self,event):
